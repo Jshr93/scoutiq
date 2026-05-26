@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Scout IQ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -79,6 +80,11 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 .toggle input:checked+.tog-sl:before{transform:translateX(18px);background:#fff;}
 .comp-btn{border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:'Bebas Neue',cursive;letter-spacing:1px;border:1px solid var(--border);background:var(--surface);color:var(--muted);white-space:nowrap;}
 .comp-btn.active{background:#f5c84222;border-color:var(--gold);color:var(--gold);}
+#sync-dot{width:7px;height:7px;border-radius:50%;display:inline-block;opacity:0;transition:opacity 0.4s;flex-shrink:0;}
+#sync-dot.syncing{opacity:1;background:var(--accent);animation:sync-blink 0.6s infinite;}
+#sync-dot.synced{opacity:1;background:var(--green);}
+#sync-dot.error{opacity:1;background:var(--red);}
+@keyframes sync-blink{0%,100%{opacity:1;}50%{opacity:0.15;}}
 </style>
 </head>
 <body>
@@ -92,6 +98,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <div id="player-count" style="font-family:'Bebas Neue',cursive;font-size:12px;color:var(--muted);">0 PLAYERS</div>
+        <span id="sync-dot" title="Cloud sync status"></span>
         <button class="btn-small" onclick="showView('settings')" style="border-color:#6b8499;font-size:11px;">⚙ SETTINGS</button>
       </div>
   </div>
@@ -500,11 +507,86 @@ let activeDraftId=drafts.length?drafts[0].id:null, draftActiveCat='Technical';
 let currentMatchId=null, popupOpen=false;
 let radarChart=null, cmpChart=null;
 
+// ═══════════════════════════════════════════════
+// SUPABASE CLOUD SYNC
+// ═══════════════════════════════════════════════
+const _SB_URL = 'https://nusdvwdqrrhotauqnmau.supabase.co';
+const _SB_KEY = 'sb_publishable_SQQFZL2R_P5jLSGt1ufwDg_zDn6A-1o';
+const _sb = window.supabase.createClient(_SB_URL, _SB_KEY);
+
+let DEVICE_ID = localStorage.getItem('siq_device_id');
+if (!DEVICE_ID) {
+  DEVICE_ID = (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() :
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    }));
+  localStorage.setItem('siq_device_id', DEVICE_ID);
+}
+
+function showSyncDot(state) {
+  const dot = document.getElementById('sync-dot');
+  if (!dot) return;
+  dot.className = state || '';
+}
+
+let _syncDebounce = null;
+function syncToSupabase() {
+  if (_syncDebounce) clearTimeout(_syncDebounce);
+  _syncDebounce = setTimeout(async () => {
+    showSyncDot('syncing');
+    try {
+      const { error } = await _sb.from('siq_data').upsert({
+        device_id: DEVICE_ID,
+        players:    players,
+        matches:    matches,
+        drafts:     drafts,
+        benchmarks: bmScores,
+        settings:   SIQ_SETTINGS,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'device_id' });
+      showSyncDot(error ? 'error' : 'synced');
+      setTimeout(() => showSyncDot(''), error ? 3000 : 2000);
+    } catch(e) {
+      showSyncDot('error');
+      setTimeout(() => showSyncDot(''), 3000);
+    }
+  }, 500);
+}
+
+async function loadFromSupabase() {
+  try {
+    const { data, error } = await _sb.from('siq_data').select('*').eq('device_id', DEVICE_ID).single();
+    if (error) {
+      if (error.code === 'PGRST116') syncToSupabase(); // no row yet — upload local data
+      return;
+    }
+    if (!data) return;
+    if (data.players)    players  = data.players;
+    if (data.matches)    matches  = data.matches;
+    if (data.drafts)     drafts   = data.drafts;
+    if (data.benchmarks) bmScores = data.benchmarks;
+    if (data.settings) {
+      Object.assign(SIQ_SETTINGS, data.settings);
+      SIQ_SETTINGS.compLevelMult = COMP_LEVELS[SIQ_SETTINGS.compLevel]?.mult || 1;
+    }
+    localStorage.setItem('siq_v4_players',    JSON.stringify(players));
+    localStorage.setItem('siq_v4_matches',    JSON.stringify(matches));
+    localStorage.setItem('siq_v4_drafts',     JSON.stringify(drafts));
+    localStorage.setItem('siq_v4_benchmarks', JSON.stringify(bmScores));
+    localStorage.setItem('siq_v5_settings',   JSON.stringify(SIQ_SETTINGS));
+    activeDraftId = drafts.length ? drafts[0].id : null;
+    applyAccentColor(SIQ_SETTINGS.accentColor || '#00e5ff');
+    showView('roster');
+  } catch(e) {}
+}
+
 function save(){
   localStorage.setItem('siq_v4_players',    JSON.stringify(players));
   localStorage.setItem('siq_v4_benchmarks', JSON.stringify(bmScores));
   localStorage.setItem('siq_v4_drafts',     JSON.stringify(drafts));
   localStorage.setItem('siq_v4_matches',    JSON.stringify(matches));
+  syncToSupabase();
 }
 function emptyScores(pos){const o={};getParams(pos||'ST').forEach(p=>{o[p.id]=0;});return o;}
 
@@ -1347,6 +1429,7 @@ function resetAllData(){
 updateDraftBadge();
 applyAccentColor(SIQ_SETTINGS.accentColor||'#00e5ff');
 showView('roster');
+loadFromSupabase();
 </script>
 </body>
 </html>
