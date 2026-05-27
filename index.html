@@ -1007,7 +1007,6 @@ function updateFormation(team){
   const sel=document.getElementById('m-form-'+team);if(!sel)return;
   const form=sel.value;
   m[team+'Formation']=form;
-  m[team+'Players']=makePlayers11(form,team);
   save();renderFieldPlayers();renderHighlightsSummary();
 }
 function renderFieldPlayers(){
