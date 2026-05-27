@@ -325,6 +325,20 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       <div class="st-row"><div><div class="st-label">Correction bonus</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="10" step="1" id="st-rae-bonus" oninput="updateStSlider('raeBonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-rae-bonus">3 pts</span></div></div>
     </div>
 
+    <!-- PROFESSIONAL STATUS BONUS -->
+    <div class="st-section">
+      <div class="st-title">🏅 PROFESSIONAL STATUS BONUS</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace;">Bonus added to final score based on professional status. Youth pros get a bigger bonus the younger they are. Ages 21–22 get 60% of the division bonus.</div>
+
+      <div style="font-size:9px;color:var(--accent);font-family:monospace;letter-spacing:1px;margin-bottom:6px;">▸ YOUTH PRO (&lt;18)</div>
+      <div class="st-row"><div><div class="st-label">Bonus at age 17</div><div class="st-sub">Minimum — scales up for younger ages</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="15" step="1" id="st-pro-youth-min" oninput="updateStSlider('proYouthMinBonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-pro-youth-min">5 pts</span></div></div>
+      <div class="st-row"><div><div class="st-label">Bonus at age ≤13</div><div class="st-sub">Maximum — youngest professionals</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="25" step="1" id="st-pro-youth-max" oninput="updateStSlider('proYouthMaxBonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-pro-youth-max">15 pts</span></div></div>
+
+      <div style="font-size:9px;color:var(--gold);font-family:monospace;letter-spacing:1px;margin:10px 0 6px;">▸ DIVISION BONUS (U21)</div>
+      <div class="st-row"><div><div class="st-label">1st Division</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="20" step="1" id="st-pro-div1" oninput="updateStSlider('proDiv1Bonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-pro-div1">8 pts</span></div></div>
+      <div class="st-row"><div><div class="st-label">2nd Division</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="15" step="1" id="st-pro-div2" oninput="updateStSlider('proDiv2Bonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-pro-div2">4 pts</span></div></div>
+    </div>
+
     <!-- UI PREFERENCES -->
     <div class="st-section">
       <div class="st-title">🎨 UI PREFERENCES</div>
@@ -602,7 +616,7 @@ function emptyScores(pos){const o={};getParams(pos||'ST').forEach(p=>{o[p.id]=0;
 // SCORING ENGINE
 // ═══════════════════════════════════════════════
 // ── SIQ_SETTINGS: fine-tuning configuration (loaded from localStorage) ──
-const SIQ_SETTINGS_DEFAULTS={compLevel:'youth',compLevelMult:1.0,youthCoachBoost:25,youthPhysPenalty:15,youthStatsDiscount:25,peakOutputBonus:10,vetPhysDecay:15,vetCoachDecay:20,neutralYouth:50,neutralSenior:42,thresholds:{elite:80,high:65,promising:50,developing:35},lfBonus:4,lfPositions:['LB','LCD','LW','LM'],matchImpact:false,matchWeight:0,raeCorrection:false,raeBonus:3,accentColor:'#00e5ff',fieldColor:'#2d5a27'};
+const SIQ_SETTINGS_DEFAULTS={compLevel:'youth',compLevelMult:1.0,youthCoachBoost:25,youthPhysPenalty:15,youthStatsDiscount:25,peakOutputBonus:10,vetPhysDecay:15,vetCoachDecay:20,neutralYouth:50,neutralSenior:42,thresholds:{elite:80,high:65,promising:50,developing:35},lfBonus:4,lfPositions:['LB','LCD','LW','LM'],matchImpact:false,matchWeight:0,raeCorrection:false,raeBonus:3,proYouthMinBonus:5,proYouthMaxBonus:15,proDiv1Bonus:8,proDiv2Bonus:4,accentColor:'#00e5ff',fieldColor:'#2d5a27'};
 const COMP_LEVELS={youth:{label:'Youth Academy',mult:1.0,desc:'Max potential focus. Age curve fully active.'},regional:{label:'Regional',mult:0.95,desc:'Semi-competitive. Balance of talent & results.'},national:{label:'National',mult:0.88,desc:'High-level. Consistency matters.'},pro:{label:'Pro / First Team',mult:0.80,desc:'Elite standard. Very hard to score high.'}};
 let SIQ_SETTINGS=(()=>{let s=JSON.parse(localStorage.getItem('siq_v5_settings')||'null')||{...SIQ_SETTINGS_DEFAULTS};Object.keys(SIQ_SETTINGS_DEFAULTS).forEach(k=>{if(s[k]===undefined)s[k]=SIQ_SETTINGS_DEFAULTS[k];});if(!s.thresholds)s.thresholds={...SIQ_SETTINGS_DEFAULTS.thresholds};if(!s.lfPositions)s.lfPositions=[...SIQ_SETTINGS_DEFAULTS.lfPositions];s.compLevelMult=COMP_LEVELS[s.compLevel]?.mult||1;return s;})();
 function saveSettings(){localStorage.setItem('siq_v5_settings',JSON.stringify(SIQ_SETTINGS));}
@@ -642,8 +656,9 @@ function computeScore(scores,pos,yob,foot,birthMonth=0,status='amateur',division
   if(SIQ_SETTINGS.lfPositions.includes(pos)&&foot==='Left')s=Math.min(100,s+SIQ_SETTINGS.lfBonus);
   if(SIQ_SETTINGS.raeCorrection&&age<=17&&birthMonth>=10)s=Math.min(100,s+SIQ_SETTINGS.raeBonus);
   if(status==='professional'){
-    if(age<18){const _yb=[0,0,0,0,0,0,0,0,0,0,0,0,0,15,12,9,7,5];s=Math.min(100,s+(age<13?15:(_yb[age]||5)));}
-    if(age<=22&&division){const _db=division==='first'?(age<=20?8:5):(age<=20?4:2);s=Math.min(100,s+_db);}
+    const _S=SIQ_SETTINGS;
+    if(age<18){const _yb=age<=13?_S.proYouthMaxBonus:Math.round(_S.proYouthMinBonus+(_S.proYouthMaxBonus-_S.proYouthMinBonus)*Math.max(0,(17-age)/4));s=Math.min(100,s+_yb);}
+    if(age<=22&&division){const _sc=age<=20?1:0.6;const _db=Math.round((division==='first'?_S.proDiv1Bonus:_S.proDiv2Bonus)*_sc);s=Math.min(100,s+_db);}
   }
   return s;
 }
@@ -738,7 +753,7 @@ function openDetail(id){
   const _divLabel={first:'1st Div',second:'2nd Div'};
   const statusStr=p.status==='professional'?` · PRO${p.division?' ('+(_divLabel[p.division]||'')+')':''}`:' · Amateur';
   const _pa=getAge(p.yob);let _pb=0;
-  if(p.status==='professional'){if(_pa<18){const _yb=[0,0,0,0,0,0,0,0,0,0,0,0,0,15,12,9,7,5];_pb+=_pa<13?15:(_yb[_pa]||5);}if(_pa<=22&&p.division){_pb+=p.division==='first'?(_pa<=20?8:5):(_pa<=20?4:2);}}
+  if(p.status==='professional'){const _S=SIQ_SETTINGS;if(_pa<18){_pb+=_pa<=13?_S.proYouthMaxBonus:Math.round(_S.proYouthMinBonus+(_S.proYouthMaxBonus-_S.proYouthMinBonus)*Math.max(0,(17-_pa)/4));}if(_pa<=22&&p.division){const _sc=_pa<=20?1:0.6;_pb+=Math.round((p.division==='first'?_S.proDiv1Bonus:_S.proDiv2Bonus)*_sc);}}
   const proNote=_pb>0?`<div style="font-size:10px;color:#22c55e;font-family:monospace;margin-top:3px;">★ +${_pb}pts PRO BONUS${p.division?' ('+(_divLabel[p.division]||'')+')':''}</div>`:'';
   document.getElementById('detail-header').innerHTML=`
     <div style="font-family:'Bebas Neue',cursive;font-size:22px;">${p.name} ${fb}</div>
@@ -1355,6 +1370,8 @@ function renderSettingsView(){
     ['peak-out','peakOutputBonus','%'],['vet-phys','vetPhysDecay','%'],['vet-coach','vetCoachDecay','%'],
     ['neutral-youth','neutralYouth',''],['neutral-senior','neutralSenior',''],
     ['lf-bonus','lfBonus',' pts'],['match-weight','matchWeight','%'],['rae-bonus','raeBonus',' pts'],
+    ['pro-youth-min','proYouthMinBonus',' pts'],['pro-youth-max','proYouthMaxBonus',' pts'],
+    ['pro-div1','proDiv1Bonus',' pts'],['pro-div2','proDiv2Bonus',' pts'],
   ];
   sliders.forEach(([id,key,unit])=>{
     const el=document.getElementById('st-'+id),vel=document.getElementById('stv-'+id);
@@ -1384,7 +1401,7 @@ function setCompLevel(k){
 
 function updateStSlider(key,val,unit){
   const n=parseInt(val);SIQ_SETTINGS[key]=n;
-  const keyToId={youthCoachBoost:'youth-coach',youthPhysPenalty:'youth-phys',youthStatsDiscount:'youth-stats',peakOutputBonus:'peak-out',vetPhysDecay:'vet-phys',vetCoachDecay:'vet-coach',neutralYouth:'neutral-youth',neutralSenior:'neutral-senior',lfBonus:'lf-bonus',matchWeight:'match-weight',raeBonus:'rae-bonus'};
+  const keyToId={youthCoachBoost:'youth-coach',youthPhysPenalty:'youth-phys',youthStatsDiscount:'youth-stats',peakOutputBonus:'peak-out',vetPhysDecay:'vet-phys',vetCoachDecay:'vet-coach',neutralYouth:'neutral-youth',neutralSenior:'neutral-senior',lfBonus:'lf-bonus',matchWeight:'match-weight',raeBonus:'rae-bonus',proYouthMinBonus:'pro-youth-min',proYouthMaxBonus:'pro-youth-max',proDiv1Bonus:'pro-div1',proDiv2Bonus:'pro-div2'};
   const vid='stv-'+(keyToId[key]||key);
   const vel=document.getElementById(vid);if(vel)vel.textContent=n+unit;
   saveSettings();
