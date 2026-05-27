@@ -95,7 +95,7 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
 <!-- HEADER -->
 <div id="header" style="padding:14px 16px 10px;position:sticky;top:0;background:var(--bg);z-index:10;border-bottom:1px solid var(--border);">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <div>
+    <div onclick="showView('match')" style="cursor:pointer;">
       <div style="font-family:'Bebas Neue',cursive;font-size:26px;letter-spacing:3px;color:var(--accent);line-height:1;">SCOUT IQ</div>
       <div style="font-size:9px;color:var(--muted);letter-spacing:2px;font-family:monospace;">TALENT EVALUATION SYSTEM</div>
     </div>
@@ -317,9 +317,9 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
     <!-- RELATIVE AGE EFFECT -->
     <div class="st-section">
       <div class="st-title">🗓️ RELATIVE AGE EFFECT</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace;">Research (FC Barcelona, Scottish FA) shows Oct–Dec born youth are systematically undervalued due to physical maturity bias vs. Jan-born peers.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace;">Research (FC Barcelona, Scottish FA) shows Oct–Dec born youth are undervalued vs. Jan-born peers. Only applied to U17 players with birth month set in their profile.</div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div><div class="st-label">Apply RAE correction</div><div class="st-sub">Q4 born (Oct–Dec) gets bonus</div></div>
+        <div><div class="st-label">Apply RAE correction</div><div class="st-sub">U17 only · Q4 born (Oct–Dec) · needs birth month</div></div>
         <label class="tog-wrap"><input type="checkbox" id="st-rae" onchange="onToggleSetting('raeCorrection',this.checked)"><span class="tog-sl"></span></label>
       </div>
       <div class="st-row"><div><div class="st-label">Correction bonus</div></div><div style="display:flex;align-items:center;gap:6px;"><input type="range" min="0" max="10" step="1" id="st-rae-bonus" oninput="updateStSlider('raeBonus',this.value,' pts')" style="width:80px;"/><span class="st-val" id="stv-rae-bonus">3 pts</span></div></div>
@@ -361,7 +361,8 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
       <div class="grid-2">
         <div class="col-full"><label class="label">FULL NAME</label><input id="f-name" type="text" placeholder="Player name" oninput="updateLiveScore()"/></div>
         <div><label class="label">YEAR OF BIRTH</label><input id="f-yob" type="number" value="2007" min="1970" max="2020" oninput="updateLiveScore()"/></div>
-        <div><label class="label">NATIONALITY</label><input id="f-nat" type="text" placeholder="Country"/></div>
+        <div><label class="label">BIRTH MONTH <span style="font-size:9px;color:var(--muted);">▸ U17 RAE</span></label><select id="f-month" onchange="updateLiveScore()"><option value="0">– not set –</option><option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option><option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option><option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option><option value="10">Oct ★</option><option value="11">Nov ★</option><option value="12">Dec ★</option></select></div>
+        <div class="col-full"><label class="label">NATIONALITY</label><input id="f-nat" type="text" placeholder="Country"/></div>
         <div class="col-full"><label class="label">POSITION</label>
           <select id="f-pos" onchange="updateLiveScore();renderSliders();">
             <option value="GK">Goalkeeper</option><option value="LB">Left Back</option>
@@ -615,7 +616,7 @@ function getAgeMult(age,id){
   if(_PHYSICAL.includes(id))return 1-vp;if(_COACHABLE.includes(id))return 1-vc;if(_OUTPUT.includes(id))return 1+po;return 1;
 }
 function getAge(yob){return new Date().getFullYear()-yob;}
-function computeScore(scores,pos,yob,foot){
+function computeScore(scores,pos,yob,foot,birthMonth=0){
   const age=getAge(yob),w=WEIGHTS[pos],bm=bmScores[pos];
   const compMult=SIQ_SETTINGS.compLevelMult;
   let ws=0,wt=0;
@@ -635,6 +636,7 @@ function computeScore(scores,pos,yob,foot){
   if(rawN>0)s=Math.round(s*(tgt/rawN));
   s=Math.max(0,Math.min(100,s));
   if(SIQ_SETTINGS.lfPositions.includes(pos)&&foot==='Left')s=Math.min(100,s+SIQ_SETTINGS.lfBonus);
+  if(SIQ_SETTINGS.raeCorrection&&age<=17&&birthMonth>=10)s=Math.min(100,s+SIQ_SETTINGS.raeBonus);
   return s;
 }
 function _rawNeutral(pos,age,compMult){
@@ -721,10 +723,13 @@ function openDetail(id){
   const c=scoreColor(p.score),lbl=scoreLabel(p.score),cats=getCats(p.position),bm=DEFAULT_BENCHMARKS[p.position];
   const fb=p.foot==='Left'?`<span class="foot-badge foot-left">LEFT FOOTED</span>`:p.foot==='Both'?`<span class="foot-badge foot-left">BOTH FEET</span>`:`<span class="foot-badge foot-right">RIGHT FOOTED</span>`;
   const leftNote=SIQ_SETTINGS.lfPositions.includes(p.position)&&p.foot==='Left'?`<div style="font-size:10px;color:#f5c842;font-family:monospace;margin-top:3px;">★ +${SIQ_SETTINGS.lfBonus}pts LEFT FOOT BONUS</div>`:'';
+  const _MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const bmStr=(p.birthMonth&&p.birthMonth>0)?` ${_MONTHS[p.birthMonth-1]}`:'';
+  const raeNote=SIQ_SETTINGS.raeCorrection&&getAge(p.yob)<=17&&(p.birthMonth||0)>=10?`<div style="font-size:10px;color:#a78bfa;font-family:monospace;margin-top:3px;">★ +${SIQ_SETTINGS.raeBonus}pts RAE CORRECTION (Q4 BORN)</div>`:'';
   document.getElementById('detail-header').innerHTML=`
     <div style="font-family:'Bebas Neue',cursive;font-size:22px;">${p.name} ${fb}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:3px;">${POSITIONS[p.position]} · Born ${p.yob} (${getAge(p.yob)}y)${p.nationality?' · '+p.nationality:''}${p.team?' · '+p.team:''}</div>
-    <div style="font-size:10px;color:var(--muted);font-family:monospace;">BENCHMARK: ${bm.name}</div>${leftNote}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:3px;">${POSITIONS[p.position]} · Born ${p.yob}${bmStr} (${getAge(p.yob)}y)${p.nationality?' · '+p.nationality:''}${p.team?' · '+p.team:''}</div>
+    <div style="font-size:10px;color:var(--muted);font-family:monospace;">BENCHMARK: ${bm.name}</div>${leftNote}${raeNote}
     <div style="text-align:center;padding:14px 0;">
       <div style="font-family:'Bebas Neue',cursive;font-size:68px;color:${c};line-height:1;">${p.score}</div>
       <div style="font-size:11px;letter-spacing:4px;color:${c};font-family:monospace;margin-top:3px;">${lbl}</div>
@@ -819,7 +824,7 @@ function renderBmEditor(){
   document.getElementById('bm-editor-body').innerHTML=html;
 }
 function updateBmParam(id,val){bmEditScores[id]=parseInt(val);const v=document.getElementById('bmval-'+id),b=document.getElementById('bmbar-'+id);if(v)v.textContent=val;if(b)b.style.width=(val*10)+'%';}
-function saveBenchmark(){bmScores[activeBmPos]={...bmEditScores};players.forEach(p=>{if(p.position===activeBmPos)p.score=computeScore(p.scores,p.position,p.yob,p.foot);});save();showToast('BENCHMARK SAVED ✓');}
+function saveBenchmark(){bmScores[activeBmPos]={...bmEditScores};players.forEach(p=>{if(p.position===activeBmPos)p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0);});save();showToast('BENCHMARK SAVED ✓');}
 function resetBenchmark(){if(!confirm('Reset?'))return;bmScores[activeBmPos]={...DEFAULT_BENCHMARKS[activeBmPos].scores};save();renderBmEditor();showToast('RESET ✓');}
 
 // ═══════════════════════════════════════════════
@@ -924,7 +929,7 @@ function saveDraftAsPlayer(id){
   saveDraftFormState();const d=drafts.find(x=>x.id===id);if(!d)return;
   if(!d.name.trim()){showToast('ADD A NAME FIRST');return;}
   const score=computeScore(d.scores,d.pos,d.yob,d.foot);
-  players.push({id:Date.now(),name:d.name,yob:d.yob,position:d.pos,nationality:d.nat,foot:d.foot,team:d.team,observations:d.obs,scores:{...d.scores},score});
+  players.push({id:Date.now(),name:d.name,yob:d.yob,position:d.pos,nationality:d.nat,foot:d.foot,birthMonth:0,team:d.team,observations:d.obs,scores:{...d.scores},score});
   drafts=drafts.filter(x=>x.id!==id);activeDraftId=drafts.length?drafts[drafts.length-1].id:null;
   save();updateDraftBadge();
   if(drafts.length)renderDraftBoard();else showView('roster');
@@ -1072,8 +1077,8 @@ function openPlayerPopup(e,idx,team){
     const val=p.params[id]||0;
     html+=`<div class="popup-param">
       <span class="popup-label">${label}</span>
-      <div class="star-row" id="stars-${id}" onclick="setStarRating('${id}',event)">${renderStars(val)}</div>
-      <span style="font-size:10px;color:var(--muted);font-family:monospace;margin-left:4px;min-width:22px;">${val>0?val.toFixed(1):'-'}</span>
+      <input type="range" min="0" max="3" step="0.5" value="${val}" oninput="updateMatchParam('${id}',parseFloat(this.value))" style="flex:1;cursor:pointer;margin:0 6px;"/>
+      <span id="pval-${id}" style="font-size:12px;color:var(--accent);font-family:'Bebas Neue',cursive;min-width:22px;text-align:right;">${val>0?val.toFixed(1):'-'}</span>
     </div>`;
   });
   document.getElementById('popup-body').innerHTML=html;
@@ -1136,7 +1141,14 @@ function toggleHighlight(){
   const btn=document.getElementById('pp-hl-btn');
   if(btn){btn.style.background=hl?'#f5c84233':'transparent';btn.style.color=hl?'#f5c842':'#555';btn.style.borderColor=hl?'#f5c842':'#333';btn.textContent=hl?'★':'☆';}
 }
-function closePopup(){document.getElementById('player-popup').style.display='none';popupOpen=false;}
+function closePopup(){document.getElementById('player-popup').style.display='none';popupOpen=false;renderFieldPlayers();renderHighlightsSummary();}
+function updateMatchParam(id,val){
+  const m=matches.find(x=>x.id===currentMatchId);if(!m)return;
+  const pls=popupTeam==='home'?m.homePlayers:m.awayPlayers;
+  if(pls[popupIdx])pls[popupIdx].params[id]=val;
+  const el=document.getElementById('pval-'+id);if(el)el.textContent=val>0?val.toFixed(1):'-';
+  save();
+}
 document.addEventListener('click',e=>{if(popupOpen&&!document.getElementById('player-popup').contains(e.target))closePopup();});
 
 function renderHighlightsSummary(){
@@ -1222,6 +1234,7 @@ function promoteToPlayer(idx,team){
 function initForm(){
   editingId=null;formScores=emptyScores('ST');
   document.getElementById('f-name').value='';document.getElementById('f-yob').value=2007;
+  document.getElementById('f-month').value='0';
   document.getElementById('f-nat').value='';document.getElementById('f-pos').value='ST';
   document.getElementById('f-foot').value='Right';document.getElementById('f-team').value='';
   document.getElementById('f-obs').value='';document.getElementById('save-btn').disabled=true;
@@ -1233,6 +1246,7 @@ function openEdit(){
   editingId=p.id;formScores={...p.scores};
   getParams(p.position).forEach(pm=>{if(formScores[pm.id]===undefined)formScores[pm.id]=5;});
   document.getElementById('f-name').value=p.name;document.getElementById('f-yob').value=p.yob;
+  document.getElementById('f-month').value=p.birthMonth||0;
   document.getElementById('f-nat').value=p.nationality||'';document.getElementById('f-pos').value=p.position;
   document.getElementById('f-foot').value=p.foot;document.getElementById('f-team').value=p.team||'';
   document.getElementById('f-obs').value=p.observations||'';
@@ -1266,8 +1280,9 @@ function renderSliders(){
 function updateParam(id,val){formScores[id]=parseInt(val);const v=document.getElementById('val-'+id),b=document.getElementById('bar-'+id);if(v)v.textContent=val;if(b)b.style.width=(val*10)+'%';updateLiveScore();}
 function updateLiveScore(){
   const pos=document.getElementById('f-pos')?.value||'ST',yob=parseInt(document.getElementById('f-yob')?.value)||2007,foot=document.getElementById('f-foot')?.value||'Right',name=document.getElementById('f-name')?.value||'';
+  const month=parseInt(document.getElementById('f-month')?.value)||0;
   const cats=getCats(pos);if(!cats.includes(activeCat)){activeCat=cats[0];renderCatTabs();renderSliders();}
-  const score=computeScore(formScores,pos,yob,foot),c=scoreColor(score);
+  const score=computeScore(formScores,pos,yob,foot,month),c=scoreColor(score);
   document.getElementById('live-score-val').textContent=score;document.getElementById('live-score-val').style.color=c;
   document.getElementById('live-score-label').textContent=scoreLabel(score);document.getElementById('live-score-label').style.color=c;
   document.getElementById('live-benchmark').textContent='vs '+DEFAULT_BENCHMARKS[pos].name;
@@ -1275,9 +1290,9 @@ function updateLiveScore(){
 }
 function savePlayer(){
   const name=document.getElementById('f-name').value.trim();if(!name)return;
-  const pos=document.getElementById('f-pos').value,yob=parseInt(document.getElementById('f-yob').value)||2007,nat=document.getElementById('f-nat').value.trim(),foot=document.getElementById('f-foot').value,team=document.getElementById('f-team').value.trim(),obs=document.getElementById('f-obs').value.trim(),score=computeScore(formScores,pos,yob,foot);
-  if(editingId){const idx=players.findIndex(p=>p.id===editingId);if(idx>-1)players[idx]={...players[idx],name,yob,position:pos,nationality:nat,foot,team,observations:obs,scores:{...formScores},score};const sid=editingId;editingId=null;save();openDetail(sid);showToast('UPDATED ✓');}
-  else{players.push({id:Date.now(),name,yob,position:pos,nationality:nat,foot,team,observations:obs,scores:{...formScores},score});save();showView('roster');showToast('SAVED ✓');}
+  const pos=document.getElementById('f-pos').value,yob=parseInt(document.getElementById('f-yob').value)||2007,nat=document.getElementById('f-nat').value.trim(),foot=document.getElementById('f-foot').value,birthMonth=parseInt(document.getElementById('f-month').value)||0,team=document.getElementById('f-team').value.trim(),obs=document.getElementById('f-obs').value.trim(),score=computeScore(formScores,pos,yob,foot,birthMonth);
+  if(editingId){const idx=players.findIndex(p=>p.id===editingId);if(idx>-1)players[idx]={...players[idx],name,yob,position:pos,nationality:nat,foot,birthMonth,team,observations:obs,scores:{...formScores},score};const sid=editingId;editingId=null;save();openDetail(sid);showToast('UPDATED ✓');}
+  else{players.push({id:Date.now(),name,yob,position:pos,nationality:nat,foot,birthMonth,team,observations:obs,scores:{...formScores},score});save();showView('roster');showToast('SAVED ✓');}
 }
 
 // ═══════════════════════════════════════════════
@@ -1395,7 +1410,7 @@ function applyFieldColor(color){
   document.querySelectorAll('.field-wrap').forEach(f=>f.style.background=color);
   SIQ_SETTINGS.fieldColor=color;saveSettings();
 }
-function recomputeAll(){players.forEach(p=>{p.score=computeScore(p.scores,p.position,p.yob,p.foot);});save();}
+function recomputeAll(){players.forEach(p=>{p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0);});save();}
 
 function exportData(){
   const d={players,matches,drafts,bmScores,settings:SIQ_SETTINGS,exportedAt:new Date().toISOString()};
