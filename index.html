@@ -376,6 +376,8 @@ input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-
         </div>
         <div><label class="label">DOMINANT FOOT</label><select id="f-foot" onchange="updateLiveScore()"><option>Right</option><option>Left</option><option>Both</option></select></div>
         <div><label class="label">TEAM / CATEGORY</label><input id="f-team" type="text" placeholder="e.g. Boca Juniors U17"/></div>
+        <div><label class="label">STATUS</label><select id="f-status" onchange="toggleDivisionRow();updateLiveScore()"><option value="amateur">Amateur</option><option value="professional">Professional</option></select></div>
+        <div id="f-division-wrap" style="display:none;"><label class="label">DIVISION</label><select id="f-division" onchange="updateLiveScore()"><option value="">Not set</option><option value="first">1st Division</option><option value="second">2nd Division</option></select></div>
         <div class="col-full"><label class="label">SCOUT OBSERVATIONS</label><textarea id="f-obs" placeholder="Notes..."></textarea></div>
       </div>
     </div>
@@ -486,11 +488,13 @@ const FORM_KEYS=Object.keys(FORMATIONS);
 
 // Match params shown in popup
 const MATCH_PARAMS=[
-  {id:"sp",label:"SP"},
-  {id:"lp",label:"LP"},
+  {id:"sp",label:"SPEED"},
+  {id:"pass",label:"PASS"},
+  {id:"lp",label:"L-PASS"},
   {id:"tech",label:"TECH"},
   {id:"oneVone",label:"1v1"},
   {id:"phys",label:"PHYS"},
+  {id:"aerial",label:"AERIAL"},
   {id:"ctrl",label:"CTRL"},
   {id:"shot",label:"SHOT"},
   {id:"intel",label:"INTL"},
@@ -616,7 +620,7 @@ function getAgeMult(age,id){
   if(_PHYSICAL.includes(id))return 1-vp;if(_COACHABLE.includes(id))return 1-vc;if(_OUTPUT.includes(id))return 1+po;return 1;
 }
 function getAge(yob){return new Date().getFullYear()-yob;}
-function computeScore(scores,pos,yob,foot,birthMonth=0){
+function computeScore(scores,pos,yob,foot,birthMonth=0,status='amateur',division=''){
   const age=getAge(yob),w=WEIGHTS[pos],bm=bmScores[pos];
   const compMult=SIQ_SETTINGS.compLevelMult;
   let ws=0,wt=0;
@@ -637,6 +641,10 @@ function computeScore(scores,pos,yob,foot,birthMonth=0){
   s=Math.max(0,Math.min(100,s));
   if(SIQ_SETTINGS.lfPositions.includes(pos)&&foot==='Left')s=Math.min(100,s+SIQ_SETTINGS.lfBonus);
   if(SIQ_SETTINGS.raeCorrection&&age<=17&&birthMonth>=10)s=Math.min(100,s+SIQ_SETTINGS.raeBonus);
+  if(status==='professional'){
+    if(age<18){const _yb=[0,0,0,0,0,0,0,0,0,0,0,0,0,15,12,9,7,5];s=Math.min(100,s+(age<13?15:(_yb[age]||5)));}
+    if(age<=22&&division){const _db=division==='first'?(age<=20?8:5):(age<=20?4:2);s=Math.min(100,s+_db);}
+  }
   return s;
 }
 function _rawNeutral(pos,age,compMult){
@@ -695,12 +703,13 @@ function renderRoster(){
   list.innerHTML=players.map(p=>{
     const c=scoreColor(p.score),age=getAge(p.yob);
     const fb=p.foot==='Left'?`<span class="foot-badge foot-left">L</span>`:p.foot==='Both'?`<span class="foot-badge foot-left">B</span>`:'';
+    const proBadge=p.status==='professional'?`<span style="font-size:8px;background:var(--accent);color:var(--bg);border-radius:3px;padding:0 3px;margin-left:4px;font-family:monospace;vertical-align:middle;">${p.division==='first'?'PRO 1D':p.division==='second'?'PRO 2D':'PRO'}</span>`:'';
     return `<div class="player-card" onclick="openDetail(${p.id})">
       <div style="width:42px;height:42px;border-radius:8px;background:${c}22;border:1.5px solid ${c};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
         <span style="font-family:'Bebas Neue',cursive;font-size:17px;color:${c};">${p.score}</span>
       </div>
       <div style="flex:1;min-width:0;">
-        <div style="font-family:'Bebas Neue',cursive;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}${fb}</div>
+        <div style="font-family:'Bebas Neue',cursive;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}${fb}${proBadge}</div>
         <div style="font-size:11px;color:var(--muted);">${POSITIONS[p.position]} · ${p.yob} (${age}y)${p.team?' · '+p.team:''}</div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0;">
@@ -726,10 +735,15 @@ function openDetail(id){
   const _MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const bmStr=(p.birthMonth&&p.birthMonth>0)?` ${_MONTHS[p.birthMonth-1]}`:'';
   const raeNote=SIQ_SETTINGS.raeCorrection&&getAge(p.yob)<=17&&(p.birthMonth||0)>=10?`<div style="font-size:10px;color:#a78bfa;font-family:monospace;margin-top:3px;">★ +${SIQ_SETTINGS.raeBonus}pts RAE CORRECTION (Q4 BORN)</div>`:'';
+  const _divLabel={first:'1st Div',second:'2nd Div'};
+  const statusStr=p.status==='professional'?` · PRO${p.division?' ('+(_divLabel[p.division]||'')+')':''}`:' · Amateur';
+  const _pa=getAge(p.yob);let _pb=0;
+  if(p.status==='professional'){if(_pa<18){const _yb=[0,0,0,0,0,0,0,0,0,0,0,0,0,15,12,9,7,5];_pb+=_pa<13?15:(_yb[_pa]||5);}if(_pa<=22&&p.division){_pb+=p.division==='first'?(_pa<=20?8:5):(_pa<=20?4:2);}}
+  const proNote=_pb>0?`<div style="font-size:10px;color:#22c55e;font-family:monospace;margin-top:3px;">★ +${_pb}pts PRO BONUS${p.division?' ('+(_divLabel[p.division]||'')+')':''}</div>`:'';
   document.getElementById('detail-header').innerHTML=`
     <div style="font-family:'Bebas Neue',cursive;font-size:22px;">${p.name} ${fb}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:3px;">${POSITIONS[p.position]} · Born ${p.yob}${bmStr} (${getAge(p.yob)}y)${p.nationality?' · '+p.nationality:''}${p.team?' · '+p.team:''}</div>
-    <div style="font-size:10px;color:var(--muted);font-family:monospace;">BENCHMARK: ${bm.name}</div>${leftNote}${raeNote}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:3px;">${POSITIONS[p.position]} · Born ${p.yob}${bmStr} (${getAge(p.yob)}y)${p.nationality?' · '+p.nationality:''}${p.team?' · '+p.team:''}${statusStr}</div>
+    <div style="font-size:10px;color:var(--muted);font-family:monospace;">BENCHMARK: ${bm.name}</div>${leftNote}${raeNote}${proNote}
     <div style="text-align:center;padding:14px 0;">
       <div style="font-family:'Bebas Neue',cursive;font-size:68px;color:${c};line-height:1;">${p.score}</div>
       <div style="font-size:11px;letter-spacing:4px;color:${c};font-family:monospace;margin-top:3px;">${lbl}</div>
@@ -824,7 +838,7 @@ function renderBmEditor(){
   document.getElementById('bm-editor-body').innerHTML=html;
 }
 function updateBmParam(id,val){bmEditScores[id]=parseInt(val);const v=document.getElementById('bmval-'+id),b=document.getElementById('bmbar-'+id);if(v)v.textContent=val;if(b)b.style.width=(val*10)+'%';}
-function saveBenchmark(){bmScores[activeBmPos]={...bmEditScores};players.forEach(p=>{if(p.position===activeBmPos)p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0);});save();showToast('BENCHMARK SAVED ✓');}
+function saveBenchmark(){bmScores[activeBmPos]={...bmEditScores};players.forEach(p=>{if(p.position===activeBmPos)p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0,p.status||'amateur',p.division||'');});save();showToast('BENCHMARK SAVED ✓');}
 function resetBenchmark(){if(!confirm('Reset?'))return;bmScores[activeBmPos]={...DEFAULT_BENCHMARKS[activeBmPos].scores};save();renderBmEditor();showToast('RESET ✓');}
 
 // ═══════════════════════════════════════════════
@@ -968,7 +982,7 @@ function countHighlights(m){
 // MATCH  —  create / edit
 // ═══════════════════════════════════════════════
 function makePlayers11(form,team){
-  return FORMATIONS[form][team].map((pos,i)=>({i,jerseyNum:i+1,yob:'',foot:'R',highlighted:false,params:{sp:0,lp:0,tech:0,oneVone:0,phys:0,ctrl:0,shot:0,intel:0}}));
+  return FORMATIONS[form][team].map((pos,i)=>({i,jerseyNum:i+1,name:'',yob:'',foot:'R',highlighted:false,params:{sp:0,pass:0,lp:0,tech:0,oneVone:0,phys:0,aerial:0,ctrl:0,shot:0,intel:0}}));
 }
 function openNewMatch(){
   const id=Date.now();
@@ -1064,14 +1078,15 @@ function openPlayerPopup(e,idx,team){
   const popup=document.getElementById('player-popup');
   // Build popup content
   const hl=p.highlighted;
-  let html=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;margin-right:18px;">
+  let html=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;margin-right:18px;">
     <span style="font-family:'Bebas Neue',cursive;font-size:13px;letter-spacing:1px;">#</span>
     <input id="pp-jersey" type="number" value="${p.jerseyNum||idx+1}" min="1" max="99" style="width:38px;padding:2px 4px;font-size:13px;border-radius:4px;" oninput="updatePopupField('jerseyNum',parseInt(this.value)||${idx+1})"/>
     <button id="pp-hl-btn" onclick="toggleHighlight()" style="margin-left:auto;background:${hl?'#f5c84233':'transparent'};color:${hl?'#f5c842':'#555'};border:1px solid ${hl?'#f5c842':'#333'};border-radius:6px;padding:2px 8px;font-size:16px;cursor:pointer;line-height:1.2;">${hl?'★':'☆'}</button>
   </div>
+  <div style="margin-bottom:8px;"><span class="label">NAME</span><input id="pp-name" type="text" value="${p.name||''}" placeholder="Player name..." style="padding:5px 6px;font-size:12px;" oninput="updatePopupField('name',this.value)"/></div>
   <div style="display:flex;gap:8px;margin-bottom:10px;">
     <div style="flex:1;"><span class="label">YOB</span><input id="pp-yob" type="number" value="${p.yob||''}" min="1980" max="2020" placeholder="2007" style="padding:5px 6px;font-size:12px;" oninput="updatePopupField('yob',this.value)"/></div>
-    <div style="flex:1;"><span class="label">FOOT</span><select id="pp-foot" style="padding:5px 6px;font-size:12px;" onchange="updatePopupField('foot',this.value)"><option ${p.foot==='R'?'selected':''}>R</option><option ${p.foot==='L'?'selected':''}>L</option></select></div>
+    <div style="width:50px;"><span class="label">FOOT</span><select id="pp-foot" style="padding:4px 2px;font-size:11px;" onchange="updatePopupField('foot',this.value)"><option ${p.foot==='R'?'selected':''}>R</option><option ${p.foot==='L'?'selected':''}>L</option></select></div>
   </div>`;
   MATCH_PARAMS.forEach(({id,label})=>{
     const val=p.params[id]||0;
@@ -1223,7 +1238,7 @@ function promoteToPlayer(idx,team){
   if(drafts.length>=5){showToast('MAX 5 DRAFTS');return;}
   const id=Date.now();
   const teamName=team==='home'?(m.homeTeam||''):(m.awayTeam||'');
-  drafts.push({id,name:'',yob:p.yob||2007,nat:'',pos:'ST',foot:p.foot==='L'?'Left':'Right',team:teamName,obs:`From match: ${m.homeTeam||'HOME'} vs ${m.awayTeam||'AWAY'} ${m.date||''}`,scores:emptyScores('ST'),activeCat:'Technical'});
+  drafts.push({id,name:p.name||'',yob:p.yob||2007,nat:'',pos:'ST',foot:p.foot==='L'?'Left':'Right',team:teamName,obs:`From match: ${m.homeTeam||'HOME'} vs ${m.awayTeam||'AWAY'} ${m.date||''}`,scores:emptyScores('ST'),activeCat:'Technical'});
   activeDraftId=id;save();updateDraftBadge();
   showView('draft');showToast('ADDED TO DRAFT ✓');
 }
@@ -1236,6 +1251,7 @@ function initForm(){
   document.getElementById('f-name').value='';document.getElementById('f-yob').value=2007;
   document.getElementById('f-month').value='0';
   document.getElementById('f-nat').value='';document.getElementById('f-pos').value='ST';
+  if(document.getElementById('f-status')){document.getElementById('f-status').value='amateur';document.getElementById('f-division').value='';toggleDivisionRow();}
   document.getElementById('f-foot').value='Right';document.getElementById('f-team').value='';
   document.getElementById('f-obs').value='';document.getElementById('save-btn').disabled=true;
   document.getElementById('save-btn').textContent='SAVE PLAYER';
@@ -1249,6 +1265,9 @@ function openEdit(){
   document.getElementById('f-month').value=p.birthMonth||0;
   document.getElementById('f-nat').value=p.nationality||'';document.getElementById('f-pos').value=p.position;
   document.getElementById('f-foot').value=p.foot;document.getElementById('f-team').value=p.team||'';
+  document.getElementById('f-status').value=p.status||'amateur';
+  document.getElementById('f-division').value=p.division||'';
+  toggleDivisionRow();
   document.getElementById('f-obs').value=p.observations||'';
   document.getElementById('save-btn').disabled=false;document.getElementById('save-btn').textContent='UPDATE PLAYER';
   document.getElementById('form-title').textContent='EDIT PROSPECT';
@@ -1259,6 +1278,12 @@ function openEdit(){
   renderCatTabs();renderSliders();updateLiveScore();
 }
 function cancelForm(){if(editingId){openDetail(editingId);editingId=null;}else showView('roster');}
+function toggleDivisionRow(){
+  const s=document.getElementById('f-status')?.value;
+  const w=document.getElementById('f-division-wrap');
+  if(w)w.style.display=s==='professional'?'block':'none';
+  if(s!=='professional'){const d=document.getElementById('f-division');if(d)d.value='';}
+}
 function renderCatTabs(){
   const pos=document.getElementById('f-pos')?.value||'ST',cats=getCats(pos);
   if(!cats.includes(activeCat))activeCat=cats[0];
@@ -1281,8 +1306,10 @@ function updateParam(id,val){formScores[id]=parseInt(val);const v=document.getEl
 function updateLiveScore(){
   const pos=document.getElementById('f-pos')?.value||'ST',yob=parseInt(document.getElementById('f-yob')?.value)||2007,foot=document.getElementById('f-foot')?.value||'Right',name=document.getElementById('f-name')?.value||'';
   const month=parseInt(document.getElementById('f-month')?.value)||0;
+  const status=document.getElementById('f-status')?.value||'amateur';
+  const division=document.getElementById('f-division')?.value||'';
   const cats=getCats(pos);if(!cats.includes(activeCat)){activeCat=cats[0];renderCatTabs();renderSliders();}
-  const score=computeScore(formScores,pos,yob,foot,month),c=scoreColor(score);
+  const score=computeScore(formScores,pos,yob,foot,month,status,division),c=scoreColor(score);
   document.getElementById('live-score-val').textContent=score;document.getElementById('live-score-val').style.color=c;
   document.getElementById('live-score-label').textContent=scoreLabel(score);document.getElementById('live-score-label').style.color=c;
   document.getElementById('live-benchmark').textContent='vs '+DEFAULT_BENCHMARKS[pos].name;
@@ -1290,9 +1317,13 @@ function updateLiveScore(){
 }
 function savePlayer(){
   const name=document.getElementById('f-name').value.trim();if(!name)return;
-  const pos=document.getElementById('f-pos').value,yob=parseInt(document.getElementById('f-yob').value)||2007,nat=document.getElementById('f-nat').value.trim(),foot=document.getElementById('f-foot').value,birthMonth=parseInt(document.getElementById('f-month').value)||0,team=document.getElementById('f-team').value.trim(),obs=document.getElementById('f-obs').value.trim(),score=computeScore(formScores,pos,yob,foot,birthMonth);
-  if(editingId){const idx=players.findIndex(p=>p.id===editingId);if(idx>-1)players[idx]={...players[idx],name,yob,position:pos,nationality:nat,foot,birthMonth,team,observations:obs,scores:{...formScores},score};const sid=editingId;editingId=null;save();openDetail(sid);showToast('UPDATED ✓');}
-  else{players.push({id:Date.now(),name,yob,position:pos,nationality:nat,foot,birthMonth,team,observations:obs,scores:{...formScores},score});save();showView('roster');showToast('SAVED ✓');}
+  const pos=document.getElementById('f-pos').value,yob=parseInt(document.getElementById('f-yob').value)||2007,nat=document.getElementById('f-nat').value.trim(),foot=document.getElementById('f-foot').value,birthMonth=parseInt(document.getElementById('f-month').value)||0,team=document.getElementById('f-team').value.trim(),obs=document.getElementById('f-obs').value.trim();
+  const status=document.getElementById('f-status').value||'amateur';
+  const division=status==='professional'?(document.getElementById('f-division').value||''):'';
+  if(status==='amateur'&&(new Date().getFullYear()-yob)>20){showToast('PLAYERS OVER 20 MUST BE PROFESSIONAL');return;}
+  const score=computeScore(formScores,pos,yob,foot,birthMonth,status,division);
+  if(editingId){const idx=players.findIndex(p=>p.id===editingId);if(idx>-1)players[idx]={...players[idx],name,yob,position:pos,nationality:nat,foot,birthMonth,status,division,team,observations:obs,scores:{...formScores},score};const sid=editingId;editingId=null;save();openDetail(sid);showToast('UPDATED ✓');}
+  else{players.push({id:Date.now(),name,yob,position:pos,nationality:nat,foot,birthMonth,status,division,team,observations:obs,scores:{...formScores},score});save();showView('roster');showToast('SAVED ✓');}
 }
 
 // ═══════════════════════════════════════════════
@@ -1410,7 +1441,7 @@ function applyFieldColor(color){
   document.querySelectorAll('.field-wrap').forEach(f=>f.style.background=color);
   SIQ_SETTINGS.fieldColor=color;saveSettings();
 }
-function recomputeAll(){players.forEach(p=>{p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0);});save();}
+function recomputeAll(){players.forEach(p=>{p.score=computeScore(p.scores,p.position,p.yob,p.foot,p.birthMonth||0,p.status||'amateur',p.division||'');});save();}
 
 function exportData(){
   const d={players,matches,drafts,bmScores,settings:SIQ_SETTINGS,exportedAt:new Date().toISOString()};
